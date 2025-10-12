@@ -53,4 +53,26 @@ const removeSong = async (req, res) => {
         res.json({ success: false });
     }
 }
-export { addSong, listSong, removeSong }
+const searchSong = async (req, res) => {
+    try {
+        const query = req.query.query;
+        if (!query || query.trim() === "") {
+            return res.status(400).json({ success: false, message: "Missing search query" });
+        }
+
+        const regex = new RegExp(query, 'i');
+        const matchedSongs = await songModel.find({
+            $or: [
+                { name: { $regex: regex } },
+                { desc: { $regex: regex } },
+                { album: { $regex: regex } }
+            ]
+        });
+
+        res.json({ success: true, songs: matchedSongs });
+    } catch (error) {
+        console.error("Search error:", error);
+        res.status(500).json({ success: false, message: "Search failed" });
+    }
+};
+export { addSong, listSong, removeSong, searchSong }

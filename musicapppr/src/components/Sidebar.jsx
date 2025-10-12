@@ -13,10 +13,11 @@ const Sidebar = () => {
                     <img className="w-6" src={assets.home_icon} alt="" />
                     <p className="front-bold">Trang chủ</p>
                 </div>
-                <div className="flex items-center gap-3 pl-8 cursor-pointer">
+                <div onClick={() => navigate('/search')} className="flex items-center gap-3 pl-8 cursor-pointer">
                     <img className="w-6" src={assets.search_icon} alt="" />
-                    <p className="front-bold">Tìm kiếm</p>
+                    <p className="font-bold">Tìm kiếm</p>
                 </div>
+
             </div>
             <div className="bg-[#121212] h-[85%] rounded">
                 <div className="p-4 flex items-center justify-between">
