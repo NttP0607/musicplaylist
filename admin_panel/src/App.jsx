@@ -7,6 +7,7 @@ import ListSong from "./pages/ListSong";
 import ListAlbum from "./pages/ListAlbum";
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
+import ListArtist from "./pages/ListArtist";
 
 export const url = "http://localhost:4000";
 const App = () => {
@@ -22,6 +23,8 @@ const App = () => {
             <Route path="/add-album" element={<AddAlbum />} />
             <Route path="/list-song" element={<ListSong />} />
             <Route path="/list-album" element={<ListAlbum />} />
+            <Route path="/list-artist" element={<ListArtist />} />
+
           </Routes>
         </div>
 
