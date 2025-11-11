@@ -17,9 +17,9 @@ const Sidebar = () => {
                     <img src={assets.song_icon} className="w-[20px] sm:w-[25px]" alt="" />
                     <p className="hidden sm:block">List Song</p>
                 </NavLink>
-                <NavLink to='/add-album' className="flex items-center gap-2.5 pl-5 sm:pl-10 cursor-pointer hover:bg-[#d4e4d7] py-2">
+                <NavLink to='/list-playlist' className="flex items-center gap-2.5 pl-5 sm:pl-10 cursor-pointer hover:bg-[#d4e4d7] py-2">
                     <img src={assets.add_album} className="w-[20px] sm:w-[25px]" alt="" />
-                    <p className="hidden sm:block">Add Album</p>
+                    <p className="hidden sm:block">List Playlist</p>
                 </NavLink>
                 <NavLink to='/list-album' className="flex items-center gap-2.5 pl-5 sm:pl-10 cursor-pointer hover:bg-[#d4e4d7] py-2">
                     <img src={assets.album_icon} className="w-[20px] sm:w-[25px]" alt="" />

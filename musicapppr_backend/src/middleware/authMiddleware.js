@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import userModel from "../models/userModel.js";
 
+
 // Middleware xác thực người dùng qua JWT
 export const verifyToken = async (req, res, next) => {
     try {

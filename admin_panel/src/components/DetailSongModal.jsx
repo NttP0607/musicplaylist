@@ -3,6 +3,15 @@ import React from 'react';
 const DetailSongModal = ({ song, onClose, formatDuration }) => {
     if (!song) return null;
 
+    // Helper để biến mảng object thành chuỗi tên, hoặc trả về 'N/A'
+    const getNames = (arr) => {
+        if (Array.isArray(arr) && arr.length > 0) {
+            // Kiểm tra xem phần tử có phải là object (đã populate) và lấy .name
+            return arr.map(item => item.name || item).join(', ');
+        }
+        return 'N/A';
+    };
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 overflow-y-auto">
             <div className="bg-white p-6 md:p-8 rounded-lg shadow-2xl w-full max-w-lg m-4">
@@ -33,11 +42,17 @@ const DetailSongModal = ({ song, onClose, formatDuration }) => {
                         <p className="font-semibold text-gray-700">Thời Lượng:</p>
                         <p className="text-gray-800">{formatDuration(song.duration || 0)}</p>
 
+                        {/* ✅ SỬA: Hiển thị TÊN Thể Loại */}
                         <p className="font-semibold text-gray-700">Thể Loại:</p>
-                        <p className="text-gray-800">{song.genre || 'N/A'}</p>
+                        <p className="text-gray-800">
+                            {getNames(song.genres)}
+                        </p>
 
+                        {/* ✅ SỬA: Hiển thị TÊN Tâm Trạng */}
                         <p className="font-semibold text-gray-700">Tâm Trạng:</p>
-                        <p className="text-gray-800">{song.mood || 'N/A'}</p>
+                        <p className="text-gray-800">
+                            {getNames(song.moods)}
+                        </p>
                     </div>
 
                     <div className="pt-2">
