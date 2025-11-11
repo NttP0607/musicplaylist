@@ -1,6 +1,8 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import userModel from "../models/userModel.js";
+import { v2 as cloudinary } from "cloudinary";
+import fs from "fs"; // Cần thiết để xóa file tạm sau khi upload
 
 // ========================================
 // 📌 Đăng ký tài khoản
@@ -8,33 +10,21 @@ import userModel from "../models/userModel.js";
 export const registerUser = async (req, res) => {
     try {
         const { username, email, password } = req.body;
-
-        // Kiểm tra dữ liệu đầu vào
         if (!username || !email || !password) {
             return res.status(400).json({ message: "Thiếu thông tin cần thiết" });
         }
-
-        // Kiểm tra email đã tồn tại
         const existingUser = await userModel.findOne({ email });
         if (existingUser) {
             return res.status(400).json({ message: "Email đã được sử dụng" });
         }
-
-        // Mã hóa mật khẩu
         const hashedPassword = await bcrypt.hash(password, 10);
-
-        // Tạo người dùng mới
         const newUser = new userModel({ username, email, password: hashedPassword });
         await newUser.save();
 
-        // Xóa mật khẩu trước khi trả về
         const userWithoutPassword = newUser.toObject();
         delete userWithoutPassword.password;
 
-        res.status(201).json({
-            message: "Đăng ký thành công",
-            user: userWithoutPassword,
-        });
+        res.status(201).json({ message: "Đăng ký thành công", user: userWithoutPassword });
     } catch (error) {
         console.error("Lỗi đăng ký:", error);
         res.status(500).json({ message: "Lỗi server" });
@@ -47,27 +37,20 @@ export const registerUser = async (req, res) => {
 export const loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
-
-        // Kiểm tra người dùng
         const user = await userModel.findOne({ email });
         if (!user) {
             return res.status(400).json({ message: "Email không tồn tại" });
         }
-
-        // Kiểm tra mật khẩu
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(400).json({ message: "Mật khẩu không chính xác" });
         }
-
-        // Tạo token JWT
+        // Tạo token JWT, nhúng role để phân quyền
         const token = jwt.sign(
             { _id: user._id, role: user.role },
             process.env.JWT_SECRET || "mysecret",
             { expiresIn: "7d" }
         );
-
-        // Trả về kết quả
         res.status(200).json({
             message: "Đăng nhập thành công",
             token,
@@ -90,6 +73,7 @@ export const loginUser = async (req, res) => {
 // ========================================
 export const getUserProfile = async (req, res) => {
     try {
+        // req.user được điền bởi authMiddleware
         res.status(200).json({ user: req.user });
     } catch (error) {
         console.error("Lỗi lấy thông tin người dùng:", error);
@@ -102,7 +86,6 @@ export const getUserProfile = async (req, res) => {
 // ========================================
 export const updateUser = async (req, res) => {
     try {
-        // ✅ Kiểm tra quyền
         if (req.user._id.toString() !== req.params.id && req.user.role !== "admin") {
             return res.status(403).json({ message: "Không có quyền cập nhật người khác" });
         }
@@ -110,36 +93,37 @@ export const updateUser = async (req, res) => {
         const { username } = req.body;
         let avatarUrl;
 
-        // ✅ Nếu người dùng upload file avatar mới
         if (req.file) {
-            const result = await cloudinary.uploader.upload(req.file.path, {
-                folder: "user_avatars",
-                resource_type: "image",
-            });
-            avatarUrl = result.secure_url;
+            try {
+                const result = await cloudinary.uploader.upload(req.file.path, {
+                    folder: "user_avatars",
+                    resource_type: "image",
+                });
+                avatarUrl = result.secure_url;
 
-            // Xóa file tạm sau khi upload
-            fs.unlinkSync(req.file.path);
+                // ⚠️ Xử lý an toàn: Xóa file tạm
+                try {
+                    fs.unlinkSync(req.file.path);
+                } catch (unlinkError) {
+                    console.warn(`Could not delete temp file ${req.file.path}:`, unlinkError.message);
+                }
+            } catch (uploadError) {
+                console.error("Lỗi upload avatar:", uploadError);
+                return res.status(500).json({ message: "Lỗi server khi upload avatar" });
+            }
         }
 
-        // ✅ Cập nhật user
         const updatedUser = await userModel.findByIdAndUpdate(
             req.params.id,
-            {
-                ...(username && { username }),
-                ...(avatarUrl && { avatar: avatarUrl }),
-            },
+            { ...(username && { username }), ...(avatarUrl && { avatar: avatarUrl }) },
             { new: true }
-        );
+        ).select('-password');
 
         if (!updatedUser) {
             return res.status(404).json({ message: "Không tìm thấy người dùng" });
         }
 
-        res.status(200).json({
-            message: "Cập nhật thành công",
-            user: updatedUser,
-        });
+        res.status(200).json({ message: "Cập nhật thành công", user: updatedUser });
     } catch (error) {
         console.error("Lỗi cập nhật:", error);
         res.status(500).json({ message: "Lỗi server khi cập nhật thông tin" });
@@ -151,13 +135,16 @@ export const updateUser = async (req, res) => {
 // ========================================
 export const deleteUser = async (req, res) => {
     try {
+        // Kiểm tra quyền: Chỉ được xóa chính mình hoặc là admin
         if (req.user._id.toString() !== req.params.id && req.user.role !== "admin") {
-            return res
-                .status(403)
-                .json({ message: "Không có quyền xóa người khác" });
+            return res.status(403).json({ message: "Không có quyền xóa người khác" });
         }
 
-        await userModel.findByIdAndDelete(req.params.id);
+        const deletedUser = await userModel.findByIdAndDelete(req.params.id);
+
+        if (!deletedUser) {
+            return res.status(404).json({ message: "Không tìm thấy người dùng" });
+        }
 
         res.status(200).json({ message: "Đã xóa người dùng" });
     } catch (error) {
@@ -165,11 +152,13 @@ export const deleteUser = async (req, res) => {
         res.status(500).json({ message: "Lỗi server" });
     }
 };
-// 🚪 Logout — client chỉ cần xoá token
+
+// ========================================
+// 🚪 Logout
+// ========================================
 export const logoutUser = async (req, res) => {
     try {
-        // Thực ra backend không cần xử lý nhiều nếu dùng JWT
-        // Chỉ cần thông báo client xoá token là xong
+        // Sử dụng JWT, nên chỉ cần thông báo client xóa token là đủ.
         res.status(200).json({ message: "Đăng xuất thành công, vui lòng xoá token ở phía client." });
     } catch (error) {
         console.error("Lỗi logout:", error);
