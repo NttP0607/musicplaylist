@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+pymongo
+transformers
+torch
+Pillow
+numpy
+opencv-python
+fer

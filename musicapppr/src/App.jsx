@@ -1,9 +1,13 @@
 import React, { useContext } from "react";
+// ⬅️ THÊM IMPORTS ROUTING
+import { Routes, Route } from "react-router-dom";
+// ⬅️ THÊM COMPONENT MỚI
+import EmotionAnalyzer from "./pages/EmotionAnalyzer";
+
 import Sidebar from "./components/Sidebar";
 import Player from "./components/Player";
-import Display from "./components/Display";
+import Display from "./components/Display"; // Giữ lại nếu Display là trang Home/Playlist
 import FullScreenPlayer from "./pages/FullScreenPlayer";
-// import Navbar from "./components/Navbar"; // <-- Giả định Navbar được sử dụng ở đây nếu bạn muốn nó luôn hiển thị
 import { PlayerContext } from "./context/PlayerContext";
 import { AuthContext } from "./context/AuthContext";
 import Login from "./pages/Login";
@@ -20,31 +24,43 @@ const App = () => {
     return <div className='h-screen bg-black text-white p-4'>Đang tải dữ liệu hoặc chưa có bài hát nào...</div>;
   }
 
+  const isFullScreen = playerView === 'full';
+  const mainContentHeightClass = isFullScreen ? 'h-full' : 'h-[90%]';
+
+  // 🌟 Component chứa tất cả các trang chính (Routes)
+  const MainAppRoutes = () => (
+    <Routes>
+      {/* ROUTE 1: Trang Home/Mặc định. Giả sử component Display là trang chính của bạn */}
+      <Route path="/" element={<Display />} />
+
+      {/* ROUTE 2: TRANG GỢI Ý CẢM XÚC AI */}
+      <Route path="/suggest/emotion" element={<EmotionAnalyzer />} />
+
+      {/* ROUTE 3: Thêm các route khác (ví dụ: Tìm kiếm) */}
+      <Route path="/search" element={<div>Tìm kiếm</div>} />
+
+      {/* Thêm các route khác của ứng dụng nếu cần */}
+
+    </Routes>
+  );
+
+
   return (
     <div className='h-screen bg-black'>
 
-      {/* 1. KHU VỰC NỘI DUNG CHÍNH (90% chiều cao) */}
-      <div className="h-[90%] flex">
-
-        {/* 1A. SIDEBAR: LUÔN HIỂN THỊ */}
+      <div className={mainContentHeightClass + " flex"}>
         <Sidebar />
 
-        {/* 1B. KHU VỰC HIỂN THỊ NỘI DUNG/PLAYER (flex-1) */}
         <div className="flex-1 overflow-y-auto">
 
-          {/* LƯU Ý: Nếu Navbar được nhúng trong DisplayHome, nó sẽ bị ẩn khi FullScreenPlayer được gọi */}
+          {/* ⬅️ THAY THẾ CHỖ NÀY BẰNG ROUTES */}
+          {playerView === 'mini' && <MainAppRoutes />}
 
-          {/* 🔄 HIỂN THỊ FULL SCREEN PLAYER KHI ZOOM */}
-          {/* Component này phải được thiết kế để không chứa Navbar/Sidebar */}
-          {playerView === 'full' && <FullScreenPlayer />}
-
-          {/* 🏡 HIỂN THỊ GIAO DIỆN CŨ (DISPLAY) KHI KHÔNG ZOOM */}
-          {playerView === 'mini' && <Display />}
+          {isFullScreen && <FullScreenPlayer />}
         </div>
       </div>
 
-      {/* 2. KHU VỰC PLAYER BAR (LUÔN HIỂN THỊ) */}
-      <Player />
+      {!isFullScreen && <Player />}
     </div>
   );
 };

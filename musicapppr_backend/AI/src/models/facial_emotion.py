@@ -1,57 +1,80 @@
-# 📂 backend/ai_ml/src/models/facial_emotion.py
-
-import os
-import torch
 import cv2
-import numpy as np
+import time
+from fer.fer import FER
+import os
 
-MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'facial_emotion_model', 'trained_facial_emotion_model.pt')
-EMOTION_LABELS = ["Neutral", "Happy", "Sad", "Angry", "Surprise", "Disgust", "Fear"] # Nhãn cảm xúc
+# --- 1. KHỞI TẠO MÔ HÌNH VÀ CAMERA ---
 
-
-# 🔑 TẢI MÔ HÌNH VÀO BỘ NHỚ
+# Khởi tạo mô hình FER (Tự động tải model pre-trained)
 try:
-    # Giả định mô hình là PyTorch (Bạn cần điều chỉnh nếu dùng TensorFlow/Keras)
-    FACIAL_MODEL = torch.load(MODEL_PATH, map_location=torch.device('cpu')) 
-    FACIAL_MODEL.eval()
-    print("✅ Facial Emotion Model loaded successfully.")
+    print("Đang khởi tạo mô hình FER...")
+    # Sử dụng MTCNN để phát hiện khuôn mặt chính xác hơn
+    emotion_detector = FER(mtcnn=True) 
+    print("✅ Khởi tạo mô hình thành công.")
 except Exception as e:
-    print(f"⚠️ Could not load Facial Emotion Model: {e}")
-    FACIAL_MODEL = None
+    print(f"⚠️ Lỗi khởi tạo mô hình FER: {e}")
+    emotion_detector = None
+    exit()
 
+# Khởi tạo camera (Thử nghiệm với index 0)
+cap = cv2.VideoCapture(0)
 
-def infer_facial_emotion(file_path):
-    """ Dự đoán cảm xúc từ ảnh khuôn mặt (tái sử dụng cho file tĩnh và real-time frame). """
-    if not FACIAL_MODEL:
-        return "Neutral"
+if not cap.isOpened():
+    print("❌ Lỗi: Không thể mở camera. Vui lòng kiểm tra kết nối camera.")
+    exit()
 
-    try:
-        # 1. Đọc ảnh
-        frame = cv2.imread(file_path)
-        if frame is None: return "Neutral"
-        
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        # 2. Phát hiện khuôn mặt
-        # Sử dụng detector phổ biến: Haar Cascades
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-        
-        if len(faces) == 0:
-            return "Neutral"
-            
-        # 3. Trích xuất, Tiền xử lý và Dự đoán
-        (x, y, w, h) = faces[0]
-        roi_gray = gray[y:y + h, x:x + w]
-        
-        # ⚠️ BƯỚC THIẾU TRONG MÔ HÌNH GỐC: Tiền xử lý (Ví dụ: Resize sang 48x48, Normalize, chuyển sang Tensor)
-        # Giả định: Xử lý tiền xử lý thành công và mô hình trả về index.
-        
-        # ⚡️ Giả định dự đoán thành công:
-        prediction_index = 0 
-        
-        return EMOTION_LABELS[prediction_index].capitalize() 
+# Cài đặt tốc độ khung hình (optional)
+# cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+# cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    except Exception as e:
-        print(f"Error during facial inference: {e}")
-        return "Neutral"
+# --- 2. VÒNG LẶP DỰ ĐOÁN REAL-TIME ---
+
+while True:
+    # 1. Đọc Khung hình
+    ret, frame = cap.read()
+    if not ret:
+        print("Không thể nhận khung hình từ camera. Thoát.")
+        break
+    
+    # 2. Xử lý và Dự đoán Cảm xúc
+    
+    # FER hoạt động với ảnh BGR/RGB, không cần chuyển sang grayscale
+    # Hàm detect_emotions sẽ thực hiện phát hiện khuôn mặt và dự đoán cảm xúc
+    results = emotion_detector.detect_emotions(frame)
+    
+    dominant_emotion = "Neutral"
+    
+    if results:
+        # Lấy kết quả cho khuôn mặt đầu tiên (thường là khuôn mặt lớn nhất)
+        first_face_result = results[0]
+        
+        # Trích xuất vị trí khuôn mặt (Bounding Box)
+        (x, y, w, h) = first_face_result['box']
+        
+        # Trích xuất Cảm xúc Dominant
+        emotions = first_face_result['emotions']
+        dominant_emotion = max(emotions, key=emotions.get)
+        
+        # 3. Hiển thị Khuôn mặt và Kết quả
+        
+        # Vẽ hình chữ nhật quanh khuôn mặt
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        # Đặt chữ lên trên khuôn mặt
+        text = f"Emotion: {dominant_emotion.capitalize()} ({emotions[dominant_emotion]:.2f})"
+        cv2.putText(frame, text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA)
+        
+        # Tùy chọn: Hiển thị điểm số cho tất cả cảm xúc (phức tạp hơn)
+        
+    # 4. Hiển thị Khung hình
+    cv2.imshow('Real-time Facial Emotion Detection', frame)
+    
+    # 5. Phím thoát
+    # Nhấn 'q' hoặc ESC để thoát khỏi vòng lặp
+    if cv2.waitKey(1) & 0xFF == ord('q') or cv2.waitKey(1) & 0xFF == 27:
+        break
+
+# --- 3. DỌN DẸP ---
+cap.release()
+cv2.destroyAllWindows()
+print("Dừng chương trình.")
