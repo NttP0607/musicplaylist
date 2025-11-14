@@ -1,0 +1,36 @@
+# Bỏ venv
+venv/
+env/
+.venv/
+
+# Bỏ model quá nặng
+*.safetensors
+*.pt
+*.pth
+*.h5
+*.onnx
+
+# Bỏ file DLL và exe của thư viện
+*.dll
+*.pyd
+*.exe
+
+# Bỏ cache Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Bỏ file tạm FastAPI
+uploads/
+temp/
+cache/
+
+# Bỏ dataset
+dataset/
+data/
+
+# Node modules
+node_modules/
+
+# Environment
+*.env
