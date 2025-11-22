@@ -1,6 +1,6 @@
-import { createContext, useEffect, useRef, useState, useCallback } from "react";
+import React, { createContext, useEffect, useRef, useState, useCallback } from "react";
 import axios from "axios";
-
+// import toast from 'react-hot-toast'; // Giữ lại nếu bạn có thư viện toast
 
 // Export Context
 export const PlayerContext = createContext();
@@ -12,11 +12,17 @@ const PlayerContextProvider = (props) => {
     const seekBg = useRef();
     const seekBar = useRef();
 
+    // Thay đổi URL nếu cần, dựa trên cấu hình backend thực tế của bạn
     const url = "http://localhost:4000";
 
-    const [songsData, setSongsData] = useState([]);
+    const [songsData, setSongsData] = useState([]); // Danh sách nhạc mặc định
     const [albumsData, setAlbumsData] = useState([]);
-    const [track, setTrack] = useState(null);
+
+    // TRẠNG THÁI MỚI CHO QUEUE VÀ TRACK
+    const [currentQueue, setCurrentQueue] = useState([]); // Danh sách phát hiện tại (có thể là songsData hoặc AI suggestions)
+    const [queueTrackIndex, setQueueTrackIndex] = useState(-1); // Index của track trong currentQueue
+
+    const [track, setTrack] = useState(null); // Track đang phát (lấy từ currentQueue[queueTrackIndex])
     const [playStatus, setPlayStatus] = useState(false);
 
     const [volume, setVolumeState] = useState(1);
@@ -35,7 +41,8 @@ const PlayerContextProvider = (props) => {
             second: 0,
             minute: 0
         }
-    })
+    });
+
     const togglePlayerView = (view = null) => {
         if (view) {
             setPlayerView(view);
@@ -43,23 +50,36 @@ const PlayerContextProvider = (props) => {
             setPlayerView(prev => (prev === 'mini' ? 'full' : 'mini'));
         }
     };
-    const playRandom = useCallback(() => {
-        if (songsData.length <= 1) return;
-        let randomIndex;
-        do {
-            randomIndex = Math.floor(Math.random() * songsData.length);
-        } while (track && songsData[randomIndex]._id === track._id);
-
-        setTrack(songsData[randomIndex]);
-        setPlayStatus(true);
-    }, [songsData, track]);
 
     const toggleLyricsVisibility = () => setIsLyricsVisible(prev => !prev);
+    const toggleShuffle = () => { setIsShuffled(prev => !prev); /* toast.info(`Shuffle ${!isShuffled ? 'ON' : 'OFF'}`); */ };
+    const toggleQueue = () => { setIsQueueOpen(prev => !prev); /* toast.info(`Queue panel ${!isQueueOpen ? 'opened' : 'closed'}`); */ };
 
-    const toggleShuffle = () => {
-        setIsShuffled(prev => !prev);
-        // toast.info(`Shuffle ${!isShuffled ? 'ON' : 'OFF'}`);
+    // Set Volume
+    const setVolume = (newVolume) => {
+        if (audioRef.current) {
+            audioRef.current.volume = newVolume;
+            setVolumeState(newVolume);
+            setIsMuted(newVolume === 0);
+        }
     };
+
+    // Toggle Mute
+    const toggleMute = () => {
+        if (audioRef.current) {
+            if (isMuted) {
+                const unmuteVolume = volume > 0.01 ? volume : 0.5;
+                audioRef.current.volume = unmuteVolume;
+                setVolumeState(unmuteVolume);
+                setIsMuted(false);
+            } else {
+                audioRef.current.volume = 0;
+                setIsMuted(true);
+            }
+        }
+    };
+
+    // Toggle Loop Mode
     const toggleLoop = () => {
         let newMode;
         if (loopMode === 'none') {
@@ -75,33 +95,10 @@ const PlayerContextProvider = (props) => {
         setLoopMode(newMode);
         // toast.info(`Loop mode: ${newMode}`);
     };
-    const setVolume = (newVolume) => {
-        if (audioRef.current) {
-            audioRef.current.volume = newVolume;
-            setVolumeState(newVolume);
-            setIsMuted(newVolume === 0);
-        }
-    };
-    const toggleMute = () => {
-        if (audioRef.current) {
-            if (isMuted) {
-                const unmuteVolume = volume > 0.01 ? volume : 0.5;
-                audioRef.current.volume = unmuteVolume;
-                setVolumeState(unmuteVolume);
-                setIsMuted(false);
-            } else {
-                audioRef.current.volume = 0;
-                setIsMuted(true);
-            }
-        }
-    };
-    const toggleQueue = () => {
-        setIsQueueOpen(prev => !prev);
-        // toast.info(`Queue panel ${!isQueueOpen ? 'opened' : 'closed'}`);
-    };
 
-    // 1. Hàm Play/Pause
+    // Hàm Play/Pause
     const play = () => {
+        if (!track) return;
         audioRef.current.play();
         setPlayStatus(true);
     }
@@ -110,18 +107,51 @@ const PlayerContextProvider = (props) => {
         setPlayStatus(false);
     }
 
-    // 2. Chuyển bài theo ID
+    // Chuyển bài theo ID (Sử dụng songsData, cần cập nhật nếu muốn chuyển theo currentQueue)
     const playWithId = (id) => {
         const selectedTrack = songsData.find(item => item._id === id);
         if (selectedTrack) {
+            // Khi playWithId, ta đang chơi trong context songsData
+            const index = songsData.findIndex(item => item._id === id);
+            setCurrentQueue(songsData);
+            setQueueTrackIndex(index);
             setTrack(selectedTrack);
             setPlayStatus(true);
         }
     }
 
+    // Xử lý logic chuyển bài ngẫu nhiên (chỉ trong currentQueue)
+    const playRandom = useCallback(() => {
+        if (currentQueue.length <= 1) return;
+        let randomIndex;
+        do {
+            randomIndex = Math.floor(Math.random() * currentQueue.length);
+        } while (track && currentQueue[randomIndex].file === track.file); // So sánh bằng file để đảm bảo duy nhất
+
+        setQueueTrackIndex(randomIndex);
+        setTrack(currentQueue[randomIndex]);
+        setPlayStatus(true);
+    }, [currentQueue, track]);
+
+    // 3. Chuyển bài trước
+    const previous = () => {
+        if (!track || currentQueue.length === 0) return;
+
+        let newIndex = queueTrackIndex - 1;
+
+        if (newIndex < 0) {
+            // Quay lại bài cuối cùng nếu đang ở bài đầu
+            newIndex = currentQueue.length - 1;
+        }
+
+        setQueueTrackIndex(newIndex);
+        setTrack(currentQueue[newIndex]);
+        setPlayStatus(true);
+    }
+
     // 4. Chuyển bài kế tiếp (Sử dụng useCallback để hàm ổn định trong useEffect)
     const next = useCallback(() => {
-        if (!track || songsData.length === 0) return;
+        if (!track || currentQueue.length === 0) return;
 
         // Logic Shuffle
         if (isShuffled) {
@@ -129,38 +159,26 @@ const PlayerContextProvider = (props) => {
             return;
         }
 
-        const currentIndex = songsData.findIndex(item => item._id === track._id);
+        let newIndex = queueTrackIndex + 1;
 
-        if (currentIndex !== -1 && currentIndex < songsData.length - 1) {
-            // Chuyển bài bình thường
-            setTrack(songsData[currentIndex + 1]);
-            setPlayStatus(true);
-        } else if (currentIndex === songsData.length - 1) {
+        if (newIndex >= currentQueue.length) {
             if (loopMode === 'context') {
                 // Lặp lại Context: Quay lại bài đầu tiên
-                setTrack(songsData[0]);
-                setPlayStatus(true);
+                newIndex = 0;
             } else {
                 // Dừng lại khi hết playlist (none mode)
-                setTrack(songsData[0]);
                 setPlayStatus(false);
+                setQueueTrackIndex(0);
+                setTrack(currentQueue[0]); // Đặt lại bài đầu tiên nhưng dừng
+                return;
             }
         }
-    }, [songsData, track, isShuffled, loopMode, playRandom]);
 
-    // 3. Chuyển bài trước
-    const previous = () => {
-        if (!track) return;
-        const currentIndex = songsData.findIndex(item => item._id === track._id);
-        if (currentIndex > 0) {
-            setTrack(songsData[currentIndex - 1]);
-            setPlayStatus(true);
-        } else if (currentIndex === 0) {
-            // Quay lại bài cuối cùng nếu đang ở bài đầu
-            setTrack(songsData[songsData.length - 1]);
-            setPlayStatus(true);
-        }
-    }
+        setQueueTrackIndex(newIndex);
+        setTrack(currentQueue[newIndex]);
+        setPlayStatus(true);
+
+    }, [currentQueue, queueTrackIndex, track, isShuffled, loopMode, playRandom]);
 
     const seekSong = (e) => {
         if (audioRef.current && seekBg.current) {
@@ -168,13 +186,43 @@ const PlayerContextProvider = (props) => {
         }
     }
 
-    // 5. Fetch Data
+    // === HÀM TÍCH HỢP AI: PHÁT DANH SÁCH MỚI ===
+    const playNewQueue = (newSongs, startIndex = 0) => {
+        if (newSongs.length === 0) {
+            // Tắt nhạc và xóa queue nếu danh sách rỗng
+            setPlayStatus(false);
+            setCurrentQueue([]);
+            setTrack(null);
+            setQueueTrackIndex(-1);
+            return;
+        }
+
+        // 1. Đặt danh sách gợi ý AI làm Current Queue
+        setCurrentQueue(newSongs);
+
+        // 2. Cập nhật bài hát đang phát
+        const songToPlay = newSongs[startIndex];
+        setTrack(songToPlay);
+        setQueueTrackIndex(startIndex);
+
+        // 3. Bắt đầu phát (sẽ được xử lý bởi useEffect [track, playStatus])
+        setPlayStatus(true);
+        // toast.success(`Playing ${songToPlay.name}`); // Thông báo thành công
+    };
+    // ===========================================
+
+    // 5. Fetch Data (Chỉ fetch songsData ban đầu)
     const getSongsData = async () => {
         try {
             const response = await axios.get(`${url}/api/song/list`);
-            setSongsData(response.data.songs);
-            if (response.data.songs.length > 0) {
-                setTrack(response.data.songs[0]);
+            const fetchedSongs = response.data.songs;
+            setSongsData(fetchedSongs);
+
+            if (fetchedSongs.length > 0) {
+                // Khởi tạo Current Queue là songsData mặc định
+                setCurrentQueue(fetchedSongs);
+                setQueueTrackIndex(0);
+                setTrack(fetchedSongs[0]);
             }
         } catch (error) {
             console.error("Error fetching songs:", error);
@@ -196,6 +244,8 @@ const PlayerContextProvider = (props) => {
 
             if (playStatus) {
                 audioRef.current.play().catch(e => console.error("Auto-play failed:", e));
+            } else {
+                audioRef.current.pause();
             }
 
             if (seekBar.current) {
@@ -276,12 +326,17 @@ const PlayerContextProvider = (props) => {
         isQueueOpen, toggleQueue,
         playerView, setPlayerView, togglePlayerView,
         isLyricsVisible, toggleLyricsVisibility,
+        // Dữ liệu và hàm mới cho AI Integration
+        currentQueue,
+        queueTrackIndex,
+        playNewQueue // <-- HÀM MỚI
     }
 
     // 8. Thêm PlayerContext.Provider
     return (
         <PlayerContext.Provider value={contextValue}>
             {props.children}
+            {/* Audio element chỉ render khi có track được chọn */}
             {track && <audio ref={audioRef} src={track.file}></audio>}
         </PlayerContext.Provider>
     );
